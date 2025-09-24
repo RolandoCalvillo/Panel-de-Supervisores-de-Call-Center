@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Supervisores de Call Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <!-- Scripts de Google API -->
+    <script src="https://apis.google.com/js/api.js"></script>
+    <script src="https://accounts.google.com/gsi/client"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .dashboard-card { background-color: white; border-radius: 0.75rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1); padding: 1.5rem; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; transition: background-color 0.2s; }
+        .btn:disabled { background-color: #9ca3af; cursor: not-allowed; }
+        .btn-primary { background-color: #2563eb; color: white; }
+        .btn-primary:hover:not(:disabled) { background-color: #1d4ed8; }
+        .btn-danger { background-color: #dc2626; color: white; }
+        .btn-danger:hover { background-color: #b91c1c; }
+        .btn-secondary { background-color: #6b7280; color: white; }
+        .btn-secondary:hover:not(:disabled) { background-color: #4b5563; }
+        .input-field { border: 1px solid #d1d5db; border-radius: 0.5rem; padding: 0.5rem 0.75rem; width: 100%; transition: border-color 0.2s, box-shadow 0.2s; }
+        .input-field:focus { border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; outline: none; }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+
+    <!-- Vista de Login -->
+    <div id="login-view" class="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div class="w-full max-w-md">
+            <div class="dashboard-card">
+                <div class="text-center mb-6">
+                    <i data-lucide="headphones" class="mx-auto h-12 w-12 text-blue-600"></i>
+                    <h1 class="text-2xl font-bold mt-2">Plataforma de Análisis de Llamadas</h1>
+                    <p class="text-gray-500">Inicia sesión para continuar</p>
+                </div>
+                <form id="login-form">
+                    <div class="mb-4">
+                        <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
+                        <input type="text" id="username" class="input-field" placeholder="ej: supervisor1" required>
+                    </div>
+                    <div class="mb-6">
+                        <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
+                        <input type="password" id="password" class="input-field" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-full">
+                        <i data-lucide="log-in" class="mr-2 h-4 w-4"></i>
+                        Ingresar
+                    </button>
+                    <p id="login-error" class="text-red-500 text-sm mt-4 text-center"></p>
+                </form>
+            </div>
+             <p class="text-center text-xs text-gray-500 mt-4">
+                Usuario de prueba: <strong>supervisor1</strong> / Contraseña: <strong>pass123</strong>
+            </p>
+        </div>
+    </div>
+
+    <!-- Vista del Dashboard Principal -->
+    <div id="dashboard-view" class="hidden">
+        <header class="bg-white shadow-md p-4 flex justify-between items-center">
+            <div class="flex items-center">
+                <i data-lucide="headphones" class="h-8 w-8 text-blue-600"></i>
+                <h1 class="text-xl font-bold ml-2">Panel de Supervisor</h1>
+            </div>
+            <div class="flex items-center">
+                <p class="mr-4">Bienvenido, <span id="supervisor-name" class="font-semibold"></span></p>
+                <button id="logout-btn" class="btn btn-danger">
+                    <i data-lucide="log-out" class="mr-2 h-4 w-4"></i>
+                    Salir
+                </button>
+            </div>
+        </header>
+
+        <main class="p-4 md:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Columna Izquierda: Herramientas -->
+            <div class="lg:col-span-1 flex flex-col gap-8">
+                <!-- Tarjeta para Gestionar Asesores -->
+                <div class="dashboard-card">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center"><i data-lucide="users" class="mr-2 h-5 w-5"></i>Gestionar Asesores</h2>
+                    <form id="add-agent-form" class="flex gap-2 mb-4">
+                        <input type="text" id="agent-name-input" class="input-field flex-grow" placeholder="Nombre del asesor" required>
+                        <button type="submit" class="btn btn-primary">Añadir</button>
+                    </form>
+                    <div id="agent-list" class="space-y-2 max-h-48 overflow-y-auto"></div>
+                </div>
+
+                <!-- Gestionar Tipos de Llamada y Criterios -->
+                <div class="dashboard-card">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center"><i data-lucide="clipboard-list" class="mr-2 h-5 w-5"></i>Gestionar Tipos de Llamada y Criterios</h2>
+                    <form id="add-call-type-form" class="flex gap-2 mb-4">
+                        <input type="text" id="call-type-name-input" class="input-field flex-grow" placeholder="Ej: Retención, Ventas" required>
+                        <button type="submit" class="btn btn-primary">Crear Tipo</button>
+                    </form>
+                    <div id="call-types-list" class="space-y-4 max-h-60 overflow-y-auto"></div>
+                </div>
+
+                <!-- NUEVA SECCIÓN: Conexión a Google Drive -->
+                <div class="dashboard-card">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center"><i data-lucide="cloud" class="mr-2 h-5 w-5"></i>Conexión a la Nube</h2>
+                     <div id="drive-config-warning" class="hidden bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg relative mb-4" role="alert">
+                        <strong class="font-bold">¡Acción Requerida!</strong>
+                        <span class="block sm:inline">Debes configurar tus credenciales de Google API en el código para continuar.</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-4">
+                        Conecta tu cuenta de Google Drive para leer y procesar archivos de transcripción (.txt) directamente desde una carpeta.
+                    </p>
+                    <div id="drive-auth-buttons">
+                        <button id="authorize_button" class="btn btn-primary w-full" disabled>
+                            <i data-lucide="link" class="mr-2 h-4 w-4"></i>Conectar con Google Drive
+                        </button>
+                        <button id="signout_button" class="btn btn-danger w-full hidden">
+                            <i data-lucide="unlink" class="mr-2 h-4 w-4"></i>Desconectar
+                        </button>
+                    </div>
+                    <div id="drive-status" class="mt-4 text-center"></div>
+                    <button id="sync-drive-btn" class="btn btn-secondary w-full mt-4" disabled>
+                        <i data-lucide="refresh-cw" class="mr-2 h-4 w-4"></i>Sincronizar Transcripciones
+                    </button>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Análisis y Reportes -->
+            <div class="lg:col-span-2 flex flex-col gap-8">
+                <!-- Tarjeta de Análisis de Llamadas -->
+                <div class="dashboard-card">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center"><i data-lucide="bar-chart-3" class="mr-2 h-5 w-5"></i>Análisis de Llamadas</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                         <div>
+                            <label for="filter-agent" class="block text-sm font-medium text-gray-700 mb-1">Filtrar por Asesor</label>
+                            <select id="filter-agent" class="input-field"><option value="all">Todos los asesores</option></select>
+                        </div>
+                         <div>
+                            <label for="filter-date" class="block text-sm font-medium text-gray-700 mb-1">Filtrar por Fecha</label>
+                            <input type="date" id="filter-date" class="input-field">
+                        </div>
+                    </div>
+                    <div id="kpi-container" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 text-center"></div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-100 text-gray-600 uppercase">
+                                <tr>
+                                    <th class="p-3">Asesor</th>
+                                    <th class="p-3">Fecha</th>
+                                    <th class="p-3">Sentimiento</th>
+                                    <th class="p-3">Tipo</th>
+                                    <th class="p-3">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="calls-table-body"></tbody>
+                        </table>
+                    </div>
+                     <div id="no-calls-message" class="text-center py-8 text-gray-500 hidden">
+                        <i data-lucide="inbox" class="mx-auto h-12 w-12 text-gray-400"></i>
+                        <p class="mt-2">No hay llamadas para mostrar con los filtros actuales.</p>
+                    </div>
+                </div>
+                
+                <!-- Tarjeta de Análisis con IA -->
+                <div class="dashboard-card">
+                    <h2 class="text-lg font-semibold mb-4 flex items-center"><i data-lucide="sparkles" class="mr-2 h-5 w-5 text-yellow-500"></i>Análisis con IA y Reportes</h2>
+                    <form id="ai-report-form">
+                        <div class="mb-4">
+                            <label for="ai-prompt" class="block text-sm font-medium text-gray-700 mb-1">¿Qué deseas analizar?</label>
+                            <textarea id="ai-prompt" rows="3" class="input-field" placeholder="Ej: Resume los principales motivos de queja de los clientes y sugiere mejoras." required></textarea>
+                        </div>
+                        <p class="text-sm font-medium text-gray-700 mb-2">Filtrar transcripciones para el análisis:</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                            <div>
+                                <label for="ai-filter-agent" class="block text-xs text-gray-600 mb-1">Asesor</label>
+                                <select id="ai-filter-agent" class="input-field"><option value="all">Todos</option></select>
+                            </div>
+                            <div>
+                                <label for="ai-filter-call-type" class="block text-xs text-gray-600 mb-1">Tipo Llamada</label>
+                                <select id="ai-filter-call-type" class="input-field"><option value="all">Todos</option></select>
+                            </div>
+                            <div>
+                                <label for="ai-filter-date-start" class="block text-xs text-gray-600 mb-1">Desde</label>
+                                <input type="date" id="ai-filter-date-start" class="input-field">
+                            </div>
+                             <div>
+                                <label for="ai-filter-date-end" class="block text-xs text-gray-600 mb-1">Hasta</label>
+                                <input type="date" id="ai-filter-date-end" class="input-field">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-full bg-indigo-600 hover:bg-indigo-700">
+                            <i data-lucide="wand-2" class="mr-2 h-4 w-4"></i>Generar Reporte
+                        </button>
+                    </form>
+                    <div id="ai-report-status" class="mt-4"></div>
+                    <div id="ai-report-output" class="mt-4 border-t pt-4 hidden">
+                         <div class="flex justify-between items-center mb-2">
+                            <h3 class="text-md font-semibold">Reporte Generado por IA</h3>
+                            <button id="download-pdf-btn" class="btn btn-secondary">
+                               <i data-lucide="download" class="mr-2 h-4 w-4"></i>Descargar PDF
+                            </button>
+                         </div>
+                         <div class="bg-gray-50 p-4 rounded-lg max-h-60 overflow-y-auto">
+                            <p id="ai-report-content" class="text-gray-700 whitespace-pre-wrap"></p>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal para ver transcripción -->
+    <div id="transcript-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden">
+        <div class="dashboard-card w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">Transcripción de la Llamada</h3>
+                <button id="close-modal-btn" class="text-gray-500 hover:text-gray-800"><i data-lucide="x" class="h-6 w-6"></i></button>
+            </div>
+            <div id="modal-content" class="overflow-y-auto">
+                <p class="font-semibold">Asesor: <span id="modal-agent"></span></p>
+                <p class="font-semibold">Fecha: <span id="modal-date"></span></p>
+                <p class="font-semibold mb-4">Tipo: <span id="modal-call-type"></span></p>
+                <div class="bg-gray-50 p-4 rounded-lg"><p id="modal-transcript" class="text-gray-700 whitespace-pre-wrap"></p></div>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+
+            // Referencias a elementos del DOM
+            const loginView = document.getElementById('login-view'), dashboardView = document.getElementById('dashboard-view');
+            const loginForm = document.getElementById('login-form'), loginError = document.getElementById('login-error');
+            const supervisorName = document.getElementById('supervisor-name'), logoutBtn = document.getElementById('logout-btn');
+            const addAgentForm = document.getElementById('add-agent-form'), agentNameInput = document.getElementById('agent-name-input'), agentList = document.getElementById('agent-list');
+            const addCallTypeForm = document.getElementById('add-call-type-form'), callTypeNameInput = document.getElementById('call-type-name-input'), callTypesList = document.getElementById('call-types-list');
+            const filterAgent = document.getElementById('filter-agent'), filterDate = document.getElementById('filter-date');
+            const kpiContainer = document.getElementById('kpi-container'), callsTableBody = document.getElementById('calls-table-body'), noCallsMessage = document.getElementById('no-calls-message');
+            const transcriptModal = document.getElementById('transcript-modal'), closeModalBtn = document.getElementById('close-modal-btn'), modalAgent = document.getElementById('modal-agent'), modalDate = document.getElementById('modal-date'), modalTranscript = document.getElementById('modal-transcript'), modalCallType = document.getElementById('modal-call-type');
+            const aiReportForm = document.getElementById('ai-report-form'), aiPrompt = document.getElementById('ai-prompt'), aiFilterAgent = document.getElementById('ai-filter-agent'), aiFilterCallType = document.getElementById('ai-filter-call-type'), aiFilterDateStart = document.getElementById('ai-filter-date-start'), aiFilterDateEnd = document.getElementById('ai-filter-date-end'), aiReportStatus = document.getElementById('ai-report-status'), aiReportOutput = document.getElementById('ai-report-output'), aiReportContent = document.getElementById('ai-report-content'), downloadPdfBtn = document.getElementById('download-pdf-btn');
+            
+            // --- Elementos de Google Drive ---
+            const authorizeButton = document.getElementById('authorize_button');
+            const signoutButton = document.getElementById('signout_button');
+            const driveStatus = document.getElementById('drive-status');
+            const syncDriveBtn = document.getElementById('sync-drive-btn');
+            const driveConfigWarning = document.getElementById('drive-config-warning');
+
+            let currentUser = null, db = {};
+            let gapiInited = false, gisInited = false;
+            let tokenClient;
+            let driveFolderId = null;
+
+            // --- CONFIGURACIÓN DE GOOGLE API ---
+            // IMPORTANTE: Debes reemplazar estos valores con tus propias credenciales de Google Cloud.
+            const API_KEY = 'AIzaSyDwEp9evd14zy9R8QejwjdIpzjqpNpydIM'; 
+            const CLIENT_ID = '533972320346-10pg9nle56icqb5u980k0k0aru8kicjd.apps.googleusercontent.com';
+            const SCOPES = 'https://www.googleapis.com/auth/drive.readonly';
+            const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+
+            function initDB() {
+                const localDB = localStorage.getItem('callCenterDB');
+                if (localDB) {
+                    db = JSON.parse(localDB);
+                } else {
+                    db = {
+                        users: {
+                            'supervisor1': {
+                                password: 'pass123',
+                                agents: ['Ana García', 'Carlos Ruiz'],
+                                callTypes: {
+                                    'Retención': ['Escucha activa', 'Ofreció alternativas'],
+                                    'Soporte Técnico': ['Verificación de identidad', 'Diagnóstico del problema']
+                                },
+                                calls: [],
+                                driveFolder: null
+                            }
+                        }
+                    };
+                    saveDB();
+                }
+            }
+            
+            function saveDB() { localStorage.setItem('callCenterDB', JSON.stringify(db)); }
+            
+            // --- LÓGICA DE GOOGLE DRIVE ---
+            function gapiLoaded() {
+                // La comprobación de 'YOUR_API_KEY' ya no es necesaria
+                gapi.load('client', initializeGapiClient);
+            }
+            async function initializeGapiClient() {
+                await gapi.client.init({ apiKey: API_KEY, discoveryDocs: [DISCOVERY_DOC] });
+                gapiInited = true;
+                maybeEnableButtons();
+            }
+            function gisLoaded() {
+                // La comprobación de 'YOUR_CLIENT_ID' ya no es necesaria
+                tokenClient = google.accounts.oauth2.initTokenClient({
+                    client_id: CLIENT_ID, scope: SCOPES,
+                    callback: (tokenResponse) => {
+                        if (tokenResponse.error) {
+                            driveStatus.innerHTML = `<p class="text-red-500">Error de autenticación.</p>`;
+                            return;
+                        }
+                        updateSigninStatus(true);
+                    },
+                });
+                gisInited = true;
+                maybeEnableButtons();
+            }
+            function maybeEnableButtons() { if (gapiInited && gisInited) { authorizeButton.disabled = false; }}
+
+            function updateSigninStatus(isSignedIn) {
+                if (isSignedIn) {
+                    authorizeButton.classList.add('hidden');
+                    signoutButton.classList.remove('hidden');
+                    driveFolderId = db.users[currentUser]?.driveFolder;
+                    if (driveFolderId) {
+                        driveStatus.innerHTML = `<p class="text-green-600 text-sm">Carpeta de Drive conectada. Lista para sincronizar.</p>`;
+                        syncDriveBtn.disabled = false;
+                    } else {
+                        driveStatus.innerHTML = `<button id="select-folder-btn" class="text-blue-600 underline">Selecciona la carpeta de transcripciones</button>`;
+                    }
+                } else {
+                    authorizeButton.classList.remove('hidden');
+                    signoutButton.classList.add('hidden');
+                    driveStatus.innerHTML = '<p class="text-sm text-gray-500">Desconectado.</p>';
+                    syncDriveBtn.disabled = true;
+                }
+            }
+
+            authorizeButton.onclick = () => {
+                tokenClient.callback = (resp) => {
+                    if (resp.error !== undefined) throw (resp);
+                    updateSigninStatus(true);
+                };
+                if (gapi.client.getToken() === null) {
+                    tokenClient.requestAccessToken({ prompt: 'consent' });
+                } else {
+                    tokenClient.requestAccessToken({ prompt: '' });
+                }
+            };
+
+            signoutButton.onclick = () => {
+                const token = gapi.client.getToken();
+                if (token !== null) {
+                    google.accounts.oauth2.revoke(token.access_token);
+                    gapi.client.setToken('');
+                    updateSigninStatus(false);
+                }
+            };
+            
+            driveStatus.addEventListener('click', (e) => {
+                if(e.target.id === 'select-folder-btn') createPicker();
+            });
+
+            function createPicker() {
+                const view = new google.picker.View(google.picker.ViewId.FOLDERS);
+                const picker = new google.picker.PickerBuilder()
+                    .setAppId(null)
+                    .setOAuthToken(gapi.client.getToken().access_token)
+                    .setDeveloperKey(API_KEY)
+                    .addView(view)
+                    .setLocale('es')
+                    .setCallback(pickerCallback)
+                    .build();
+                picker.setVisible(true);
+            }
+
+            function pickerCallback(data) {
+                if (data.action === google.picker.Action.PICKED) {
+                    const folder = data.docs[0];
+                    driveFolderId = folder.id;
+                    db.users[currentUser].driveFolder = driveFolderId;
+                    saveDB();
+                    driveStatus.innerHTML = `<p class="text-green-600 text-sm">Carpeta "${folder.name}" conectada. Lista para sincronizar.</p>`;
+                    syncDriveBtn.disabled = false;
+                }
+            }
+            
+            // --- FUNCIÓN DE SINCRONIZACIÓN MEJORADA CON PAGINACIÓN ---
+            syncDriveBtn.onclick = async () => {
+                driveStatus.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="loader" style="width:20px; height:20px; border-width: 2px;"></div><p class="text-blue-600">Buscando archivos...</p></div>`;
+                try {
+                    let allFiles = [];
+                    let pageToken = null;
+
+                    do {
+                        const res = await gapi.client.drive.files.list({
+                            q: `'${driveFolderId}' in parents and mimeType='text/plain' and trashed=false`,
+                            fields: 'nextPageToken, files(id, name)',
+                            pageSize: 1000, // Pedir hasta 1000 por página
+                            pageToken: pageToken
+                        });
+
+                        if (res.result.files) {
+                            allFiles = allFiles.concat(res.result.files);
+                        }
+                        pageToken = res.result.nextPageToken;
+                    } while (pageToken);
+
+                    if (allFiles.length === 0) {
+                        driveStatus.innerHTML = `<p class="text-yellow-600">No se encontraron archivos .txt en la carpeta.</p>`;
+                        return;
+                    }
+                    
+                    let newCallsCount = 0;
+                    for (const file of allFiles) {
+                        if (db.users[currentUser].calls.find(c => c.id === file.id)) continue;
+                        
+                        const parts = file.name.replace('.txt', '').split('_');
+                        if (parts.length !== 3) continue;
+
+                        const [callType, agent, date] = parts;
+                        driveStatus.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="loader" style="width:20px; height:20px; border-width: 2px;"></div><p class="text-blue-600">Procesando ${newCallsCount + 1} de ${allFiles.length}: ${file.name}</p></div>`;
+                        
+                        const fileContentRes = await gapi.client.drive.files.get({ fileId: file.id, alt: 'media' });
+                        
+                        db.users[currentUser].calls.push({
+                            id: file.id, agent, date, callType,
+                            duration: Math.floor(Math.random() * 300) + 60,
+                            sentiment: Math.floor(Math.random() * 70) + 30,
+                            transcript: fileContentRes.body
+                        });
+                        newCallsCount++;
+                    }
+                    saveDB();
+                    renderAnalytics();
+                    driveStatus.innerHTML = `<p class="text-green-600">Sincronización completa. Se añadieron ${newCallsCount} nuevas llamadas. Total de archivos procesados: ${allFiles.length}.</p>`;
+
+                } catch (err) {
+                    console.error("Error al sincronizar:", err);
+                    driveStatus.innerHTML = `<p class="text-red-500">Error al sincronizar. Revisa la consola.</p>`;
+                }
+            };
+            
+            loginForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const username = document.getElementById('username').value, password = document.getElementById('password').value;
+                if (db.users[username] && db.users[username].password === password) {
+                    currentUser = username;
+                    loginView.classList.add('hidden');
+                    dashboardView.classList.remove('hidden');
+                    renderDashboard();
+                    gapiLoaded();
+                    gisLoaded();
+                } else {
+                    loginError.textContent = 'Usuario o contraseña incorrectos.';
+                }
+            });
+
+            logoutBtn.addEventListener('click', () => {
+                const token = gapi.client ? gapi.client.getToken() : null;
+                if (token !== null) {
+                    google.accounts.oauth2.revoke(token.access_token);
+                    gapi.client.setToken('');
+                }
+                currentUser = null;
+                loginView.classList.remove('hidden');
+                dashboardView.classList.add('hidden');
+                loginForm.reset();
+                loginError.textContent = '';
+                updateSigninStatus(false);
+            });
+            
+            function renderDashboard() { if (!currentUser) return; supervisorName.textContent = currentUser; renderAgentList(); renderCallTypesManagement(); populateSelects(); renderAnalytics(); updateSigninStatus(gapi.client && gapi.client.getToken() !== null);}
+            function renderAgentList() { agentList.innerHTML = ''; const agents = db.users[currentUser].agents; if(agents.length === 0) agentList.innerHTML = '<p class="text-sm text-gray-500">No hay asesores.</p>'; else agents.forEach(agent => { const div = document.createElement('div'); div.className = 'flex justify-between items-center bg-gray-100 p-2 rounded-md'; div.innerHTML = `<span class="text-sm">${agent}</span><button data-agent="${agent}" class="delete-agent-btn text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="h-4 w-4"></i></button>`; agentList.appendChild(div); }); lucide.createIcons(); }
+            addAgentForm.addEventListener('submit', (e) => { e.preventDefault(); const agentName = agentNameInput.value.trim(); if (agentName && !db.users[currentUser].agents.includes(agentName)) { db.users[currentUser].agents.push(agentName); saveDB(); renderDashboard(); agentNameInput.value = ''; } });
+            agentList.addEventListener('click', (e) => { const btn = e.target.closest('.delete-agent-btn'); if (btn) { db.users[currentUser].agents = db.users[currentUser].agents.filter(a => a !== btn.dataset.agent); saveDB(); renderDashboard(); } });
+            function renderCallTypesManagement() { callTypesList.innerHTML = ''; const callTypes = db.users[currentUser].callTypes || {}; Object.keys(callTypes).forEach(typeName => { const criteria = callTypes[typeName]; const div = document.createElement('div'); div.className = 'p-2 border rounded-md'; div.innerHTML = `<div class="flex justify-between items-center mb-2"><h4 class="font-semibold text-sm">${typeName}</h4><button data-type-name="${typeName}" class="delete-call-type-btn text-red-500 hover:text-red-700"><i data-lucide="trash-2" class="h-4 w-4"></i></button></div><div class="pl-2 space-y-1 mb-2">${criteria.map(c => `<div class="flex items-center justify-between text-xs bg-gray-100 p-1 rounded"><p>${c}</p><button data-type-name="${typeName}" data-criterion="${c}" class="delete-criterion-btn text-gray-500 hover:text-red-500"><i data-lucide="x" class="h-3 w-3"></i></button></div>`).join('')}</div><form class="add-criterion-form flex gap-2"><input type="text" class="input-field text-sm" placeholder="Añadir criterio" required><input type="hidden" value="${typeName}"><button type="submit" class="btn btn-primary btn-sm p-2"><i data-lucide="plus" class="h-4 w-4"></i></button></form>`; callTypesList.appendChild(div); }); lucide.createIcons(); }
+            addCallTypeForm.addEventListener('submit', e => { e.preventDefault(); const typeName = callTypeNameInput.value.trim(); if (typeName) { if (!db.users[currentUser].callTypes) db.users[currentUser].callTypes = {}; if (!db.users[currentUser].callTypes[typeName]) { db.users[currentUser].callTypes[typeName] = []; saveDB(); renderDashboard(); callTypeNameInput.value = ''; } } });
+            callTypesList.addEventListener('click', e => { const deleteTypeBtn = e.target.closest('.delete-call-type-btn'); const deleteCriterionBtn = e.target.closest('.delete-criterion-btn'); if (deleteTypeBtn) { delete db.users[currentUser].callTypes[deleteTypeBtn.dataset.typeName]; saveDB(); renderDashboard(); } if (deleteCriterionBtn) { const { typeName, criterion } = deleteCriterionBtn.dataset; db.users[currentUser].callTypes[typeName] = db.users[currentUser].callTypes[typeName].filter(c => c !== criterion); saveDB(); renderDashboard(); } });
+            callTypesList.addEventListener('submit', e => { if (e.target.classList.contains('add-criterion-form')) { e.preventDefault(); const input = e.target.querySelector('input[type="text"]'); const typeName = e.target.querySelector('input[type="hidden"]').value; const criterion = input.value.trim(); if (criterion && !db.users[currentUser].callTypes[typeName].includes(criterion)) { db.users[currentUser].callTypes[typeName].push(criterion); saveDB(); renderDashboard(); } } });
+            function populateSelects() { const agents = db.users[currentUser].agents; const callTypes = Object.keys(db.users[currentUser].callTypes || {}); const selects = [ { el: filterAgent, data: agents, placeholder: 'Todos los asesores', allOption: true }, { el: aiFilterAgent, data: agents, placeholder: 'Todos', allOption: true }, { el: aiFilterCallType, data: callTypes, placeholder: 'Todos', allOption: true } ]; selects.forEach(s => { s.el.innerHTML = `<option value="all">${s.placeholder}</option>`; s.data.forEach(item => { s.el.innerHTML += `<option value="${item}">${item}</option>`; }); }); }
+            [filterAgent, filterDate].forEach(el => el.addEventListener('change', renderAnalytics));
+            function renderAnalytics() { const selectedAgent = filterAgent.value, selectedDate = filterDate.value; let filteredCalls = (db.users[currentUser].calls || []).filter(call => (selectedAgent === 'all' || call.agent === selectedAgent) && (!selectedDate || call.date === selectedDate) ); renderKPIs(filteredCalls); renderCallsTable(filteredCalls); }
+            function renderKPIs(calls) { kpiContainer.innerHTML = ''; if(calls.length === 0){ kpiContainer.innerHTML = '<p class="col-span-full text-center text-gray-500">No hay datos.</p>'; return; } const totalCalls = calls.length; const avgSentiment = calls.reduce((acc, call) => acc + call.sentiment, 0) / totalCalls || 0; const avgDuration = calls.reduce((acc, call) => acc + call.duration, 0) / totalCalls || 0; const positiveCalls = calls.filter(c => c.sentiment >= 75).length; const kpis = [ { label: 'Total Llamadas', value: totalCalls, icon: 'phone' }, { label: 'Sentimiento Prom.', value: `${avgSentiment.toFixed(1)}%`, icon: 'smile' }, { label: 'Duración Prom.', value: `${avgDuration.toFixed(0)}s`, icon: 'clock' }, { label: 'Llamadas Positivas', value: positiveCalls, icon: 'thumbs-up' } ]; kpis.forEach(kpi => { const div = document.createElement('div'); div.className = 'bg-gray-50 p-4 rounded-lg'; div.innerHTML = `<div class="flex items-center justify-center gap-2"><i data-lucide="${kpi.icon}" class="h-5 w-5 text-blue-600"></i><p class="text-xs text-gray-500 uppercase font-semibold">${kpi.label}</p></div><p class="text-2xl font-bold mt-1">${kpi.value}</p>`; kpiContainer.appendChild(div); }); lucide.createIcons(); }
+            function renderCallsTable(calls) { callsTableBody.innerHTML = ''; noCallsMessage.classList.toggle('hidden', calls.length > 0); calls.forEach(call => { const tr = document.createElement('tr'); tr.className = 'border-b hover:bg-gray-50'; const sentimentColor = call.sentiment >= 75 ? 'text-green-600' : call.sentiment < 50 ? 'text-red-600' : 'text-yellow-600'; tr.innerHTML = `<td class="p-3">${call.agent}</td><td class="p-3">${call.date}</td><td class="p-3 font-semibold ${sentimentColor}">${call.sentiment}%</td><td class="p-3 text-xs bg-gray-100 rounded-full text-center">${call.callType}</td><td class="p-3"><button data-call-id="${call.id}" class="view-transcript-btn text-blue-600 hover:underline text-sm">Ver</button></td>`; callsTableBody.appendChild(tr); }); }
+            callsTableBody.addEventListener('click', (e) => { const btn = e.target.closest('.view-transcript-btn'); if (btn) { const call = db.users[currentUser].calls.find(c => c.id === btn.dataset.callId); if (call) { modalAgent.textContent = call.agent; modalDate.textContent = call.date; modalCallType.textContent = call.callType; modalTranscript.textContent = call.transcript; transcriptModal.classList.remove('hidden'); } } });
+            closeModalBtn.addEventListener('click', () => transcriptModal.classList.add('hidden'));
+            transcriptModal.addEventListener('click', (e) => { if (e.target === transcriptModal) transcriptModal.classList.add('hidden'); });
+            aiReportForm.addEventListener('submit', (e) => { e.preventDefault(); const submitBtn = aiReportForm.querySelector('button[type="submit"]'); const agent = aiFilterAgent.value, callType = aiFilterCallType.value, startDate = aiFilterDateStart.value, endDate = aiFilterDateEnd.value, prompt = aiPrompt.value; let callsForAI = db.users[currentUser].calls.filter(call => (agent === 'all' || call.agent === agent) && (callType === 'all' || call.callType === callType) && (!startDate || call.date >= startDate) && (!endDate || call.date <= endDate) ); if (callsForAI.length === 0) { aiReportStatus.innerHTML = `<p class="text-yellow-600">No se encontraron llamadas con los filtros.</p>`; aiReportOutput.classList.add('hidden'); return; } submitBtn.disabled = true; aiReportOutput.classList.add('hidden'); aiReportStatus.innerHTML = `<div class="flex items-center gap-2"><div class="loader" style="width:20px; height:20px; border-width: 2px;"></div><p class="text-indigo-600">Analizando ${callsForAI.length} transcripciones...</p></div>`; setTimeout(() => { aiReportContent.textContent = generateSimulatedReport(prompt, callsForAI); aiReportOutput.classList.remove('hidden'); aiReportStatus.innerHTML = ''; submitBtn.disabled = false; }, 2500); });
+            function generateSimulatedReport(prompt, calls) { let report = `Reporte de IA - ${new Date().toLocaleString('es-ES')}\n`; report += `Solicitud: "${prompt}"\nLlamadas Analizadas: ${calls.length}\n\n`; const avgSentiment = calls.reduce((acc, c) => acc + c.sentiment, 0) / calls.length; if (prompt.toLowerCase().includes('queja')) { const lowSentimentCalls = calls.filter(c => c.sentiment < 50); report += `--- ANÁLISIS DE PUNTOS DE FRICCIÓN ---\nSe identificaron ${lowSentimentCalls.length} llamadas con sentimiento negativo. Las quejas recurrentes parecen estar relacionadas con [problema simulado 1] y [problema simulado 2].\nSugerencia: Capacitar al equipo en el manejo de objeciones sobre [problema simulado 1].\n`; } else if (prompt.toLowerCase().includes('fortaleza')) { const highSentimentCalls = calls.filter(c => c.sentiment > 75); report += `--- ANÁLISIS DE FORTALEZAS ---\nSe identificaron ${highSentimentCalls.length} interacciones destacadas. El asesor con mejor desempeño en este grupo es [Asesor Simulado], quien demuestra [habilidad simulada].\nSugerencia: Utilizar las llamadas de [Asesor Simulado] como material de capacitación.\n`; } else { report += `--- RESUMEN GENERAL ---\nEl sentimiento promedio de las llamadas de tipo "${calls[0]?.callType || 'General'}" es de ${avgSentiment.toFixed(1)}%. Se observa que el tema más recurrente es [tema simulado].\n`; } return report; }
+            downloadPdfBtn.addEventListener('click', () => { const { jsPDF } = window.jspdf; const doc = new jsPDF(); const reportText = aiReportContent.textContent; const margin = 15; const pageWidth = doc.internal.pageSize.getWidth(); const lines = doc.splitTextToSize(reportText, pageWidth - margin * 2); doc.text(lines, margin, margin); doc.save('reporte-ia.pdf'); });
+
+            initDB();
+        });
+    </script>
+</body>
+</html>
+
+
+
